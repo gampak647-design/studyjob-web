@@ -4,8 +4,6 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
-    paths-ignore:
-      - 'README.md'
 
 permissions:
   contents: read
@@ -23,14 +21,26 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout compiled web files
+      - name: Checkout deploy repository
         uses: actions/checkout@v4
-      - name: Configure Pages
+
+      - name: Unpack ready Study Job web build
+        run: |
+          rm -rf _site
+          mkdir -p _site
+          unzip -q StudyJob_WEB_READY.zip -d _site
+          touch _site/.nojekyll
+          test -f _site/index.html
+          test -f _site/main.dart.js
+
+      - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
-      - name: Upload compiled site
+
+      - name: Upload website only
         uses: actions/upload-pages-artifact@v3
         with:
-          path: '.'
-      - name: Deploy
+          path: _site
+
+      - name: Deploy website
         id: deployment
         uses: actions/deploy-pages@v4
