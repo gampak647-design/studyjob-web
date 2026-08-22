@@ -31,8 +31,6 @@
     return Boolean(hash.get('access_token') && hash.get('refresh_token'));
   }
 
-  // On the same-origin callback Flutter/Supabase must be the only code handling
-  // the session. In particular, do not start another Telegram SSO round here.
   if (isAuthCallback()) return;
 
   const telegram = safe(function () {
@@ -162,7 +160,6 @@
       .sj-tg-btn{width:100%;min-height:47px;border:0;border-radius:14px;margin-top:10px;padding:11px 14px;font-size:13px;font-weight:810;cursor:pointer;transition:transform .12s ease,opacity .12s ease}
       .sj-tg-btn:active{transform:scale(.985)}.sj-tg-btn:disabled{opacity:.5;cursor:default;transform:none}
       .sj-tg-btn-primary{background:linear-gradient(135deg,#687aff,#5062ef);color:#fff;box-shadow:0 10px 26px rgba(67,84,231,.24)}
-      .sj-tg-btn-secondary{background:rgba(255,255,255,.055);color:#dce2ec;border:1px solid rgba(255,255,255,.07)}
       .sj-tg-note{margin:13px 2px 0;text-align:center;color:#747e8d;font-size:10.5px;line-height:1.45}
       .sj-tg-message{display:none;margin:12px 0 0;padding:10px 12px;border-radius:12px;font-size:11.5px;line-height:1.4;background:rgba(255,71,87,.1);border:1px solid rgba(255,82,98,.16);color:#ffc4cb}.sj-tg-message.show{display:block}
       .sj-tg-progress{display:flex;flex-direction:column;align-items:center;text-align:center;padding:19px 4px 9px}
@@ -198,15 +195,9 @@
       <span class="sj-tg-kicker">Telegram Mini App</span>
       <h1 class="sj-tg-title">${escapeHtml(title)}</h1>
       <p class="sj-tg-subtitle">${escapeHtml(text)}</p>
-      <button class="sj-tg-btn sj-tg-btn-primary" id="sj-tg-retry" type="button">Повторить</button>
-      <button class="sj-tg-btn sj-tg-btn-secondary" id="sj-tg-normal" type="button">Войти обычным способом</button>`;
+      <button class="sj-tg-btn sj-tg-btn-primary" id="sj-tg-retry" type="button">Повторить через Telegram</button>
+      <p class="sj-tg-note">В Mini App вход выполняется только через подтверждённый Telegram-аккаунт.</p>`;
     document.getElementById('sj-tg-retry').onclick = boot;
-    document.getElementById('sj-tg-normal').onclick = removeGate;
-  }
-
-  function removeGate() {
-    const gate = document.getElementById('sj-tg-gate');
-    if (gate) gate.remove();
   }
 
   function setBusy(value) {
@@ -261,8 +252,8 @@
     const username = safe(function () { return telegramUser().username || ''; }, '');
     document.getElementById('sj-tg-card').innerHTML = `
       <span class="sj-tg-kicker">Первый запуск</span>
-      <h1 class="sj-tg-title">Один вход — и готово</h1>
-      <p class="sj-tg-subtitle">Привяжи существующий аккаунт Study Job к Telegram один раз. При следующих запусках вход будет автоматическим.</p>
+      <h1 class="sj-tg-title">Привязать Study Job</h1>
+      <p class="sj-tg-subtitle">Mini App использует только вход через Telegram. Один раз подтверди существующий аккаунт Study Job — дальше почта и пароль больше не понадобятся.</p>
       <div class="sj-tg-person">${avatarMarkup()}<div class="sj-tg-person-copy"><div class="sj-tg-person-name">${escapeHtml(displayName())}</div><div class="sj-tg-person-meta">${username ? '@' + escapeHtml(username) : '@' + BOT_USERNAME}</div></div></div>
       <div id="sj-tg-message" class="sj-tg-message"></div>
       <label class="sj-tg-label" for="sj-tg-email">Почта Study Job</label>
@@ -270,12 +261,10 @@
       <label class="sj-tg-label" for="sj-tg-password">Пароль</label>
       <input id="sj-tg-password" class="sj-tg-input" type="password" autocomplete="current-password" placeholder="Пароль">
       <div id="sj-tg-turnstile"></div>
-      <button id="sj-tg-connect" class="sj-tg-btn sj-tg-btn-primary" type="button">Подключить Telegram</button>
-      <button id="sj-tg-normal" class="sj-tg-btn sj-tg-btn-secondary" type="button">Войти обычным способом</button>
-      <p class="sj-tg-note">Пароль используется только для подтверждения существующего аккаунта и не сохраняется Telegram-слоем.</p>`;
+      <button id="sj-tg-connect" class="sj-tg-btn sj-tg-btn-primary" type="button">Привязать и войти через Telegram</button>
+      <p class="sj-tg-note">Это одноразовое подтверждение. Пароль не сохраняется Telegram-слоем, а следующие входы выполняются только по подписанным данным Telegram.</p>`;
 
     document.getElementById('sj-tg-connect').onclick = connectAccount;
-    document.getElementById('sj-tg-normal').onclick = removeGate;
     void loadTurnstile();
   }
 
@@ -379,8 +368,6 @@
       throw error;
     }
 
-    // Same-origin implicit callback. No Supabase /verify page is opened in the
-    // Telegram WebView, so legacy campusgo:// redirect settings cannot block it.
     const hash = new URLSearchParams({
       access_token: String(data.access_token),
       refresh_token: String(data.refresh_token),
