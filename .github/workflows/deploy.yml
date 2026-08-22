@@ -1,5 +1,6 @@
 name: Deploy Study Job Web
 
+# Manual no-op touch: force Pages to deploy the latest compiled ZIP.
 on:
   workflow_dispatch:
   push:
