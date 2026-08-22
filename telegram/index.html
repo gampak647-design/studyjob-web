@@ -11,6 +11,34 @@
   <link rel="icon" type="image/png" href="/favicon.png">
   <title>Study Job</title>
   <script src="https://telegram.org/js/telegram-web-app.js?63"></script>
+  <script>
+    // The Telegram runtime receives a ready Supabase session and places it in
+    // the URL hash. Changing only the hash does not reload the document, so
+    // force one same-origin navigation by adding a query marker. On that fresh
+    // load the Telegram gate stays out of the way and Flutter/Supabase consumes
+    // the callback normally.
+    (function () {
+      function hasSessionHash() {
+        try {
+          var p = new URLSearchParams(String(location.hash || '').replace(/^#/, ''));
+          return Boolean(p.get('access_token') && p.get('refresh_token'));
+        } catch (_) {
+          return false;
+        }
+      }
+
+      function forceCallbackReload() {
+        if (!hasSessionHash()) return;
+        var url = new URL(location.href);
+        if (url.searchParams.get('tg_auth') === '1') return;
+        url.searchParams.set('tg_auth', '1');
+        location.replace(url.pathname + '?' + url.searchParams.toString() + url.hash);
+      }
+
+      window.addEventListener('hashchange', forceCallbackReload);
+      forceCallbackReload();
+    })();
+  </script>
   <style>
     html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#101216;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
     #studyjob-web-loader{position:fixed;inset:0;z-index:9999;display:grid;place-items:center;background:radial-gradient(circle at 50% 35%,rgba(83,106,255,.12),transparent 30%),#101216;color:#f8f9ff;transition:opacity .28s ease,visibility .28s ease}
@@ -31,7 +59,7 @@
       <div class="studyjob-loader-line" aria-hidden="true"></div>
     </div>
   </div>
-  <script src="/studyjob_telegram_runtime.js?v=11.21.1" defer></script>
-  <script src="/studyjob_bootstrap.js?v=11.21.1" defer></script>
+  <script src="/studyjob_telegram_runtime.js?v=11.21.2" defer></script>
+  <script src="/studyjob_bootstrap.js?v=11.21.2" defer></script>
 </body>
 </html>
