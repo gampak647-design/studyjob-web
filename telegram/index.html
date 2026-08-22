@@ -12,9 +12,11 @@
   <title>Study Job</title>
   <script src="https://telegram.org/js/telegram-web-app.js?63"></script>
   <script>
-    // A Supabase session is returned to this same origin in the URL hash.
-    // A hash-only change does not reload the document, so force exactly one
-    // navigation with a query marker and then let Flutter/Supabase consume it.
+    // telegram-sso returns a normal Supabase implicit session in the URL hash.
+    // The Telegram gate lives under /telegram/, while the actual Flutter app
+    // lives at /. As soon as the session appears, move it to the Flutter root.
+    // Changing the pathname guarantees a real navigation instead of a hash-only
+    // update that would leave the Telegram loading card mounted forever.
     (function () {
       function hasSessionHash() {
         try {
@@ -25,16 +27,13 @@
         }
       }
 
-      function forceCallbackReload() {
+      function handSessionToFlutter() {
         if (!hasSessionHash()) return;
-        var url = new URL(location.href);
-        if (url.searchParams.get('tg_auth') === '1') return;
-        url.searchParams.set('tg_auth', '1');
-        location.replace(url.pathname + '?' + url.searchParams.toString() + url.hash);
+        location.replace('/?tg_auth=1' + location.hash);
       }
 
-      window.addEventListener('hashchange', forceCallbackReload);
-      forceCallbackReload();
+      window.addEventListener('hashchange', handSessionToFlutter);
+      handSessionToFlutter();
 
       // Never leave the user on an endless Telegram SSO spinner.
       window.addEventListener('DOMContentLoaded', function () {
@@ -44,8 +43,8 @@
           if (!gate || !card || !card.querySelector('.sj-tg-progress')) return;
           card.innerHTML =
             '<span class="sj-tg-kicker">Telegram Mini App</span>' +
-            '<h1 class="sj-tg-title">Вход занял слишком много времени</h1>' +
-            '<p class="sj-tg-subtitle">Соединение не завершилось. Повтори вход — данные Telegram будут проверены заново.</p>' +
+            '<h1 class="sj-tg-title">Вход не завершился</h1>' +
+            '<p class="sj-tg-subtitle">Повтори вход. Если соединение уже подтверждено, Study Job откроется автоматически.</p>' +
             '<button class="sj-tg-btn sj-tg-btn-primary" id="sj-tg-watchdog-retry" type="button">Повторить</button>';
           var retry = document.getElementById('sj-tg-watchdog-retry');
           if (retry) retry.onclick = function () {
@@ -53,7 +52,7 @@
             url.searchParams.set('retry', String(Date.now()));
             location.replace(url.pathname + '?' + url.searchParams.toString());
           };
-        }, 15000);
+        }, 12000);
       });
     })();
   </script>
@@ -77,7 +76,7 @@
       <div class="studyjob-loader-line" aria-hidden="true"></div>
     </div>
   </div>
-  <script src="/studyjob_telegram_runtime.js?v=11.21.3" defer></script>
-  <script src="/studyjob_bootstrap.js?v=11.21.3" defer></script>
+  <script src="/studyjob_telegram_runtime.js?v=11.22.0" defer></script>
+  <script src="/studyjob_bootstrap.js?v=11.22.0" defer></script>
 </body>
 </html>
