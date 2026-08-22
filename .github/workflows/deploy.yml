@@ -1,6 +1,5 @@
 name: Deploy Study Job Web
 
-# Manual no-op touch: force Pages to deploy the latest compiled ZIP.
 on:
   workflow_dispatch:
   push:
@@ -26,13 +25,51 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Unpack ready Study Job web build
+        shell: bash
         run: |
           rm -rf _site
           mkdir -p _site
-          unzip -q StudyJob_WEB_READY.zip -d _site
+          python3 - <<'PY'
+          import shutil
+          import stat
+          from pathlib import Path
+          from zipfile import ZipFile
+
+          archive = Path('StudyJob_WEB_READY.zip')
+          root = Path('_site').resolve()
+
+          with ZipFile(archive) as zip_file:
+              for info in zip_file.infolist():
+                  raw_name = info.filename
+                  name = raw_name.replace('\\', '/')
+                  parts = [part for part in name.split('/') if part not in ('', '.')]
+
+                  if not parts:
+                      continue
+                  if name.startswith('/') or any(part == '..' for part in parts):
+                      raise RuntimeError(f'Unsafe ZIP entry: {raw_name!r}')
+
+                  mode = (info.external_attr >> 16) & 0xFFFF
+                  if mode and stat.S_ISLNK(mode):
+                      raise RuntimeError(f'Symlink ZIP entry is not allowed: {raw_name!r}')
+
+                  target = root.joinpath(*parts)
+                  resolved = target.resolve()
+                  if resolved != root and root not in resolved.parents:
+                      raise RuntimeError(f'ZIP entry escapes destination: {raw_name!r}')
+
+                  if info.is_dir() or name.endswith('/') or name.endswith('\\'):
+                      target.mkdir(parents=True, exist_ok=True)
+                      continue
+
+                  target.parent.mkdir(parents=True, exist_ok=True)
+                  with zip_file.open(info) as source, target.open('wb') as destination:
+                      shutil.copyfileobj(source, destination)
+          PY
           touch _site/.nojekyll
           test -f _site/index.html
           test -f _site/main.dart.js
+          test -f _site/studyjob_telegram.js
 
       - name: Overlay Telegram Mini App files
         run: |
