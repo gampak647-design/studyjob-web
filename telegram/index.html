@@ -12,11 +12,6 @@
   <title>Study Job</title>
   <script src="https://telegram.org/js/telegram-web-app.js?63"></script>
   <script>
-    // telegram-sso returns a normal Supabase implicit session in the URL hash.
-    // The Telegram gate lives under /telegram/, while the actual Flutter app
-    // lives at /. As soon as the session appears, move it to the Flutter root.
-    // Changing the pathname guarantees a real navigation instead of a hash-only
-    // update that would leave the Telegram loading card mounted forever.
     (function () {
       function hasSessionHash() {
         try {
@@ -35,7 +30,6 @@
       window.addEventListener('hashchange', handSessionToFlutter);
       handSessionToFlutter();
 
-      // Never leave the user on an endless Telegram SSO spinner.
       window.addEventListener('DOMContentLoaded', function () {
         setTimeout(function () {
           var gate = document.getElementById('sj-tg-gate');
@@ -44,8 +38,8 @@
           card.innerHTML =
             '<span class="sj-tg-kicker">Telegram Mini App</span>' +
             '<h1 class="sj-tg-title">Вход не завершился</h1>' +
-            '<p class="sj-tg-subtitle">Повтори вход. Если соединение уже подтверждено, Study Job откроется автоматически.</p>' +
-            '<button class="sj-tg-btn sj-tg-btn-primary" id="sj-tg-watchdog-retry" type="button">Повторить</button>';
+            '<p class="sj-tg-subtitle">Повтори вход через Telegram. Обычный вход внутри Mini App отключён.</p>' +
+            '<button class="sj-tg-btn sj-tg-btn-primary" id="sj-tg-watchdog-retry" type="button">Повторить через Telegram</button>';
           var retry = document.getElementById('sj-tg-watchdog-retry');
           if (retry) retry.onclick = function () {
             var url = new URL('/telegram/', location.origin);
@@ -76,7 +70,7 @@
       <div class="studyjob-loader-line" aria-hidden="true"></div>
     </div>
   </div>
-  <script src="/studyjob_telegram_runtime.js?v=11.22.0" defer></script>
-  <script src="/studyjob_bootstrap.js?v=11.22.0" defer></script>
+  <script src="/studyjob_telegram_runtime.js?v=11.22.1" defer></script>
+  <script src="/studyjob_bootstrap.js?v=11.22.1" defer></script>
 </body>
 </html>
