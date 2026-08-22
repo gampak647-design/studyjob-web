@@ -38,10 +38,8 @@ jobs:
           mkdir -p _site/telegram
           cp telegram/index.html _site/telegram/index.html
           cp studyjob_telegram_runtime.js _site/studyjob_telegram_runtime.js
-          cp studyjob_telegram_diag.js _site/studyjob_telegram_diag.js
           test -f _site/telegram/index.html
           test -f _site/studyjob_telegram_runtime.js
-          test -f _site/studyjob_telegram_diag.js
 
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
