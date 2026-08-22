@@ -5,13 +5,17 @@ on:
     branches: [ci/free-flutter-build]
     paths:
       - '.github/workflows/free-private-flutter-ci.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/free-private-flutter-ci.yml'
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: free-studyjob-private-flutter-ci
+  group: free-studyjob-private-flutter-ci-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
