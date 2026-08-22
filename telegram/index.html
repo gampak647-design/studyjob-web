@@ -12,11 +12,9 @@
   <title>Study Job</title>
   <script src="https://telegram.org/js/telegram-web-app.js?63"></script>
   <script>
-    // The Telegram runtime receives a ready Supabase session and places it in
-    // the URL hash. Changing only the hash does not reload the document, so
-    // force one same-origin navigation by adding a query marker. On that fresh
-    // load the Telegram gate stays out of the way and Flutter/Supabase consumes
-    // the callback normally.
+    // A Supabase session is returned to this same origin in the URL hash.
+    // A hash-only change does not reload the document, so force exactly one
+    // navigation with a query marker and then let Flutter/Supabase consume it.
     (function () {
       function hasSessionHash() {
         try {
@@ -37,6 +35,26 @@
 
       window.addEventListener('hashchange', forceCallbackReload);
       forceCallbackReload();
+
+      // Never leave the user on an endless Telegram SSO spinner.
+      window.addEventListener('DOMContentLoaded', function () {
+        setTimeout(function () {
+          var gate = document.getElementById('sj-tg-gate');
+          var card = document.getElementById('sj-tg-card');
+          if (!gate || !card || !card.querySelector('.sj-tg-progress')) return;
+          card.innerHTML =
+            '<span class="sj-tg-kicker">Telegram Mini App</span>' +
+            '<h1 class="sj-tg-title">Вход занял слишком много времени</h1>' +
+            '<p class="sj-tg-subtitle">Соединение не завершилось. Повтори вход — данные Telegram будут проверены заново.</p>' +
+            '<button class="sj-tg-btn sj-tg-btn-primary" id="sj-tg-watchdog-retry" type="button">Повторить</button>';
+          var retry = document.getElementById('sj-tg-watchdog-retry');
+          if (retry) retry.onclick = function () {
+            var url = new URL('/telegram/', location.origin);
+            url.searchParams.set('retry', String(Date.now()));
+            location.replace(url.pathname + '?' + url.searchParams.toString());
+          };
+        }, 15000);
+      });
     })();
   </script>
   <style>
@@ -59,7 +77,7 @@
       <div class="studyjob-loader-line" aria-hidden="true"></div>
     </div>
   </div>
-  <script src="/studyjob_telegram_runtime.js?v=11.21.2" defer></script>
-  <script src="/studyjob_bootstrap.js?v=11.21.2" defer></script>
+  <script src="/studyjob_telegram_runtime.js?v=11.21.3" defer></script>
+  <script src="/studyjob_bootstrap.js?v=11.21.3" defer></script>
 </body>
 </html>
