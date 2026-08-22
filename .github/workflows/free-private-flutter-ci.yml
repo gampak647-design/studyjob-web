@@ -1,0 +1,78 @@
+name: Free Study Job Private Flutter CI
+
+on:
+  push:
+    branches: [ci/free-flutter-build]
+    paths:
+      - '.github/workflows/free-private-flutter-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: free-studyjob-private-flutter-ci
+  cancel-in-progress: true
+
+jobs:
+  validate-and-build:
+    name: Analyze, test and build private Study Job
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+
+    steps:
+      - name: Load private Study Job feature source
+        uses: gampak647-design/study@feature/telegram-mini-app
+
+      - name: Set up Flutter 3.44.7
+        uses: subosito/flutter-action@v2.23.0
+        with:
+          flutter-version: '3.44.7'
+          channel: stable
+          cache: true
+
+      - name: Flutter version
+        run: flutter --version
+
+      - name: Resolve dependencies
+        working-directory: .studyjob-private-source
+        run: flutter pub get
+
+      - name: Static analysis
+        working-directory: .studyjob-private-source
+        run: flutter analyze
+
+      - name: Tests
+        working-directory: .studyjob-private-source
+        run: flutter test
+
+      - name: Build Flutter Web
+        working-directory: .studyjob-private-source
+        run: flutter build web --release --base-href "/"
+
+      - name: Verify Telegram production assets
+        working-directory: .studyjob-private-source
+        run: |
+          set -euo pipefail
+          test -f build/web/index.html
+          test -f build/web/main.dart.js
+          test -d build/web/assets
+          test -f build/web/studyjob_telegram.js
+          grep -q '<base href="/">' build/web/index.html
+          grep -q 'telegram-web-app.js' build/web/index.html
+
+      - name: Create ready-to-host archive
+        working-directory: .studyjob-private-source
+        run: |
+          set -euo pipefail
+          touch build/web/.nojekyll
+          cd build/web
+          zip -qr ../../../StudyJob_WEB_READY_FEATURE.zip .
+
+      - name: Upload compiled web only
+        uses: actions/upload-artifact@v4
+        with:
+          name: StudyJob-WEB-READY-FEATURE
+          path: StudyJob_WEB_READY_FEATURE.zip
+          if-no-files-found: error
+          retention-days: 3
