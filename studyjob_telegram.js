@@ -1,0 +1,121 @@
+// Study Job Telegram Mini App bridge.
+// This file deliberately exposes only the raw Telegram initData string to Dart.
+// Authorization decisions must be made server-side after validating initData.
+(function () {
+  'use strict';
+
+  function currentTelegram() {
+    try {
+      return window.Telegram && window.Telegram.WebApp
+        ? window.Telegram.WebApp
+        : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function safeString(value) {
+    return typeof value === 'string' ? value : '';
+  }
+
+  function prepareTelegram() {
+    const telegram = currentTelegram();
+    if (!telegram) return false;
+    try {
+      if (typeof telegram.ready === 'function') telegram.ready();
+      if (typeof telegram.expand === 'function') telegram.expand();
+      // Bot API 7.7+: Study Job owns vertical scrolling, so do not let the
+      // same downward gesture minimize the Mini App while browsing a list.
+      if (typeof telegram.disableVerticalSwipes === 'function') {
+        telegram.disableVerticalSwipes();
+      }
+    } catch (_) {
+      // Older Telegram clients must remain usable even without newer methods.
+    }
+    return true;
+  }
+
+  function isMiniApp() {
+    const telegram = currentTelegram();
+    return Boolean(
+      telegram &&
+      typeof telegram.initData === 'string' &&
+      telegram.initData.length > 0
+    );
+  }
+
+  async function requestWriteAccess() {
+    const telegram = currentTelegram();
+    if (!telegram || typeof telegram.requestWriteAccess !== 'function') {
+      return false;
+    }
+    return await new Promise(function (resolve) {
+      try {
+        telegram.requestWriteAccess(function (granted) {
+          resolve(granted === true);
+        });
+      } catch (_) {
+        resolve(false);
+      }
+    });
+  }
+
+  function openTelegramLink(url) {
+    if (typeof url !== 'string' || !url.startsWith('https://t.me/')) return false;
+    const telegram = currentTelegram();
+    try {
+      if (telegram && typeof telegram.openTelegramLink === 'function') {
+        telegram.openTelegramLink(url);
+        return true;
+      }
+      const opened = window.open(url, '_blank', 'noopener,noreferrer');
+      return Boolean(opened);
+    } catch (_) {
+      return false;
+    }
+  }
+
+  window.StudyJobTelegram = Object.freeze({
+    isMiniApp: function () {
+      prepareTelegram();
+      return isMiniApp();
+    },
+    getInitData: function () {
+      prepareTelegram();
+      const telegram = currentTelegram();
+      return telegram ? safeString(telegram.initData) : '';
+    },
+    getPlatform: function () {
+      const telegram = currentTelegram();
+      return telegram ? safeString(telegram.platform) : '';
+    },
+    getColorScheme: function () {
+      const telegram = currentTelegram();
+      return telegram ? safeString(telegram.colorScheme) : '';
+    },
+    getStartParam: function () {
+      const telegram = currentTelegram();
+      if (!telegram || !telegram.initDataUnsafe) return '';
+      return safeString(telegram.initDataUnsafe.start_param);
+    },
+    requestWriteAccess: requestWriteAccess,
+    openTelegramLink: openTelegramLink,
+  });
+
+  // Telegram's script and initData can become observable a little after our
+  // bridge executes inside some WebViews. Re-resolve WebApp instead of keeping
+  // a stale null reference captured at page load.
+  [0, 50, 150, 300, 600, 1000, 1600].forEach(function (delay) {
+    window.setTimeout(function () {
+      const available = prepareTelegram() && isMiniApp();
+      window.dispatchEvent(new CustomEvent('studyjob-telegram-ready', {
+        detail: { available: available },
+      }));
+    }, delay);
+  });
+
+  window.addEventListener('focus', prepareTelegram);
+  document.addEventListener('visibilitychange', function () {
+    if (!document.hidden) prepareTelegram();
+  });
+})();
