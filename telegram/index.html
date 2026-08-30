@@ -13,6 +13,8 @@
   <script src="https://telegram.org/js/telegram-web-app.js?63"></script>
   <script>
     (function () {
+      var DEEP_LINK_KEY = 'studyjob_pending_deeplink_v1';
+
       function hasSessionHash() {
         try {
           var p = new URLSearchParams(String(location.hash || '').replace(/^#/, ''));
@@ -22,11 +24,76 @@
         }
       }
 
-      function handSessionToFlutter() {
-        if (!hasSessionHash()) return;
-        location.replace('/?tg_auth=1' + location.hash);
+      function cleanDeepLink(search) {
+        try {
+          var source = search instanceof URLSearchParams ? search : new URLSearchParams(search || '');
+          var target = String(source.get('sj_target') || '').trim().toLowerCase();
+          var id = String(source.get('sj_id') || '').trim();
+          if (!target) return '';
+
+          var allowed = {
+            home: true,
+            notifications: true,
+            task: true,
+            task_chat: true,
+            task_rating: true,
+            service: true,
+            service_order: true,
+            service_order_chat: true,
+            service_order_rating: true,
+            schedule: true,
+            student_verification: true,
+            creation_restriction: true
+          };
+          if (!allowed[target]) return '';
+
+          var needsId = target === 'task' || target === 'task_chat' || target === 'task_rating' ||
+            target === 'service' || target === 'service_order' ||
+            target === 'service_order_chat' || target === 'service_order_rating';
+          if (needsId && !/^\d+$/.test(id)) return '';
+
+          var result = new URLSearchParams();
+          result.set('sj_target', target);
+          if (needsId) result.set('sj_id', id);
+          return result.toString();
+        } catch (_) {
+          return '';
+        }
       }
 
+      function saveDeepLinkFromUrl() {
+        var route = cleanDeepLink(location.search);
+        if (!route) return;
+        try { sessionStorage.setItem(DEEP_LINK_KEY, route); } catch (_) {}
+      }
+
+      function pendingDeepLink() {
+        var current = cleanDeepLink(location.search);
+        if (current) return current;
+        try { return cleanDeepLink(sessionStorage.getItem(DEEP_LINK_KEY) || ''); } catch (_) { return ''; }
+      }
+
+      function appendDeepLink(url) {
+        var route = pendingDeepLink();
+        if (!route) return url;
+        var params = new URLSearchParams(route);
+        var target = params.get('sj_target');
+        var id = params.get('sj_id');
+        if (target) url.searchParams.set('sj_target', target);
+        if (id) url.searchParams.set('sj_id', id);
+        return url;
+      }
+
+      function handSessionToFlutter() {
+        if (!hasSessionHash()) return;
+        var url = new URL('/', location.origin);
+        url.searchParams.set('tg_auth', '1');
+        appendDeepLink(url);
+        try { sessionStorage.removeItem(DEEP_LINK_KEY); } catch (_) {}
+        location.replace(url.pathname + '?' + url.searchParams.toString() + location.hash);
+      }
+
+      saveDeepLinkFromUrl();
       window.addEventListener('hashchange', handSessionToFlutter);
       handSessionToFlutter();
 
@@ -43,6 +110,7 @@
           var retry = document.getElementById('sj-tg-watchdog-retry');
           if (retry) retry.onclick = function () {
             var url = new URL('/telegram/', location.origin);
+            appendDeepLink(url);
             url.searchParams.set('retry', String(Date.now()));
             location.replace(url.pathname + '?' + url.searchParams.toString());
           };
