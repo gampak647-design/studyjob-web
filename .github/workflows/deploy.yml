@@ -131,13 +131,77 @@ jobs:
           index_path = Path('_site/telegram/index.html')
           index = index_path.read_text(encoding='utf-8')
           old_version = 'studyjob_telegram_runtime.js?v=11.22.1'
-          new_version = 'studyjob_telegram_runtime.js?v=11.22.2'
-          if old_version not in index and new_version not in index:
+          current_version = 'studyjob_telegram_runtime.js?v=11.22.2'
+          if old_version not in index and current_version not in index:
               raise RuntimeError('Telegram runtime cache marker not found')
-          index_path.write_text(index.replace(old_version, new_version), encoding='utf-8')
+          index_path.write_text(index.replace(old_version, current_version), encoding='utf-8')
           PY
           grep -q 'isSimpleTelegramSso' _site/studyjob_telegram_runtime.js
           grep -q 'studyjob_telegram_runtime.js?v=11.22.2' _site/telegram/index.html
+
+      - name: Apply Telegram first-run registration choice
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          runtime_path = Path('_site/studyjob_telegram_runtime.js')
+          runtime = runtime_path.read_text(encoding='utf-8')
+
+          css_marker = "      .sj-tg-btn-primary{background:linear-gradient(135deg,#687aff,#5062ef);color:#fff;box-shadow:0 10px 26px rgba(67,84,231,.24)}"
+          css_new = css_marker + "\n      .sj-tg-btn-secondary{background:rgba(255,255,255,.055);color:#f5f7ff;border:1px solid rgba(255,255,255,.1)}"
+          if '.sj-tg-btn-secondary{' not in runtime:
+              if css_marker not in runtime:
+                  raise RuntimeError('Telegram secondary button CSS marker not found')
+              runtime = runtime.replace(css_marker, css_new, 1)
+
+          connect_marker = "  function showConnect() {"
+          first_launch = r'''  function showFirstLaunch() {
+    ensureGate();
+    const username = safe(function () { return telegramUser().username || ''; }, '');
+    document.getElementById('sj-tg-card').innerHTML = `
+      <span class="sj-tg-kicker">Первый запуск</span>
+      <h1 class="sj-tg-title">Добро пожаловать в Study Job</h1>
+      <p class="sj-tg-subtitle">Выбери вариант ниже. Новый пользователь сначала создаёт аккаунт Study Job, а существующий аккаунт можно привязать к Telegram.</p>
+      <div class="sj-tg-person">${avatarMarkup()}<div class="sj-tg-person-copy"><div class="sj-tg-person-name">${escapeHtml(displayName())}</div><div class="sj-tg-person-meta">${username ? '@' + escapeHtml(username) : '@' + BOT_USERNAME}</div></div></div>
+      <button id="sj-tg-create-account" class="sj-tg-btn sj-tg-btn-primary" type="button">Создать аккаунт Study Job</button>
+      <button id="sj-tg-existing-account" class="sj-tg-btn sj-tg-btn-secondary" type="button">У меня уже есть аккаунт</button>
+      <p class="sj-tg-note">После регистрации и подтверждения почты снова открой Mini App и привяжи созданный аккаунт к Telegram один раз.</p>`;
+
+    document.getElementById('sj-tg-create-account').onclick = function () {
+      location.assign('/?tg_signup=1');
+    };
+    document.getElementById('sj-tg-existing-account').onclick = showConnect;
+  }
+
+'''
+          if 'function showFirstLaunch()' not in runtime:
+              if connect_marker not in runtime:
+                  raise RuntimeError('Telegram connect function marker not found')
+              runtime = runtime.replace(connect_marker, first_launch + connect_marker, 1)
+
+          unlinked_old = "    if (!data.linked) {\n      showConnect();\n      return;\n    }"
+          unlinked_new = "    if (!data.linked) {\n      showFirstLaunch();\n      return;\n    }"
+          if unlinked_old in runtime:
+              runtime = runtime.replace(unlinked_old, unlinked_new, 1)
+          elif unlinked_new not in runtime:
+              raise RuntimeError('Telegram unlinked SSO branch marker not found')
+
+          runtime_path.write_text(runtime, encoding='utf-8')
+
+          index_path = Path('_site/telegram/index.html')
+          index = index_path.read_text(encoding='utf-8')
+          previous = 'studyjob_telegram_runtime.js?v=11.22.2'
+          current = 'studyjob_telegram_runtime.js?v=11.22.3'
+          if previous in index:
+              index = index.replace(previous, current)
+          elif current not in index:
+              raise RuntimeError('Telegram first-run cache marker not found')
+          index_path.write_text(index, encoding='utf-8')
+          PY
+          grep -q 'showFirstLaunch' _site/studyjob_telegram_runtime.js
+          grep -q 'Создать аккаунт Study Job' _site/studyjob_telegram_runtime.js
+          grep -q 'studyjob_telegram_runtime.js?v=11.22.3' _site/telegram/index.html
 
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
