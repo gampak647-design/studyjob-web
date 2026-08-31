@@ -13,6 +13,25 @@
   <script src="https://telegram.org/js/telegram-web-app.js?63"></script>
   <script>
     (function () {
+      var nativeFetch = window.fetch.bind(window);
+      window.fetch = function (input, init) {
+        try {
+          var rawUrl = typeof input === 'string' ? input : String(input && input.url || '');
+          if (rawUrl.indexOf('/functions/v1/telegram-sso') !== -1) {
+            var next = Object.assign({}, init || {});
+            next.headers = {
+              'Accept': 'application/json',
+              'Content-Type': 'text/plain;charset=UTF-8'
+            };
+            return nativeFetch(input, next);
+          }
+        } catch (_) {}
+        return nativeFetch(input, init);
+      };
+    })();
+  </script>
+  <script>
+    (function () {
       var DEEP_LINK_KEY = 'studyjob_pending_deeplink_v1';
 
       function hasSessionHash() {
