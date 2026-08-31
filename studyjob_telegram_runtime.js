@@ -52,6 +52,72 @@
     return String(safe(function () { return telegram.initData || ''; }, '') || queryParam('tgWebAppData') || '');
   }
 
+  const STUDYJOB_SESSION_KEY = 'sb-ppciitxcvoettvpnierk-auth-token';
+  const TELEGRAM_SSO_HINT_KEY = 'studyjob_telegram_sso_user_v1';
+
+  function currentTelegramUserId() {
+    const user = telegramUser();
+    const id = user ? Number(user.id) : 0;
+    return Number.isSafeInteger(id) && id > 0 ? String(id) : '';
+  }
+
+  function hasPersistedStudyJobSession() {
+    try {
+      for (let i = 0; i < window.localStorage.length; i++) {
+        const key = String(window.localStorage.key(i) || '');
+        if (key !== STUDYJOB_SESSION_KEY && !key.endsWith('.' + STUDYJOB_SESSION_KEY)) continue;
+        const value = window.localStorage.getItem(key);
+        if (typeof value === 'string' && value.length > 16) return true;
+      }
+    } catch (_) {}
+    return false;
+  }
+
+  function rememberTelegramSsoUser() {
+    const id = currentTelegramUserId();
+    if (!id) return;
+    try { window.localStorage.setItem(TELEGRAM_SSO_HINT_KEY, id); } catch (_) {}
+  }
+
+  function canReusePersistedSession() {
+    if (queryParam('retry')) return false;
+    const id = currentTelegramUserId();
+    if (!id || !hasPersistedStudyJobSession()) return false;
+    try {
+      return window.localStorage.getItem(TELEGRAM_SSO_HINT_KEY) === id;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function redirectToPersistedSession() {
+    const url = new URL('/', window.location.origin);
+    url.searchParams.set('tg_auth', 'reuse');
+    const target = queryParam('sj_target').trim().toLowerCase();
+    const allowed = new Set([
+      'home', 'notifications', 'task', 'task_chat', 'task_rating',
+      'service', 'service_order', 'service_order_chat', 'service_order_rating',
+      'schedule', 'student_verification', 'admin_student_verification',
+      'creation_restriction',
+    ]);
+    const needsId = new Set([
+      'task', 'task_chat', 'task_rating', 'service', 'service_order',
+      'service_order_chat', 'service_order_rating',
+    ]);
+    if (allowed.has(target)) {
+      if (needsId.has(target)) {
+        const id = queryParam('sj_id').trim();
+        if (/^\d+$/.test(id)) {
+          url.searchParams.set('sj_target', target);
+          url.searchParams.set('sj_id', id);
+        }
+      } else {
+        url.searchParams.set('sj_target', target);
+      }
+    }
+    window.location.replace(url.pathname + '?' + url.searchParams.toString());
+  }
+
   function telegramUser() {
     return safe(function () {
       return telegram.initDataUnsafe && telegram.initDataUnsafe.user
@@ -368,6 +434,8 @@
       throw error;
     }
 
+    rememberTelegramSsoUser();
+
     const hash = new URLSearchParams({
       access_token: String(data.access_token),
       refresh_token: String(data.refresh_token),
@@ -393,6 +461,10 @@
       initData = await waitForInitData();
       if (!initData) {
         showError('Не получили данные Telegram', 'Закрой Mini App и открой его ещё раз через @' + BOT_USERNAME + '.');
+        return;
+      }
+      if (canReusePersistedSession()) {
+        redirectToPersistedSession();
         return;
       }
       await startSso();

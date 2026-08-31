@@ -134,13 +134,13 @@ jobs:
           index_path = Path('_site/telegram/index.html')
           index = index_path.read_text(encoding='utf-8')
           old_version = 'studyjob_telegram_runtime.js?v=11.22.1'
-          new_version = 'studyjob_telegram_runtime.js?v=11.22.2'
+          new_version = 'studyjob_telegram_runtime.js?v=11.22.3'
           if old_version not in index and new_version not in index:
               raise RuntimeError('Telegram runtime cache marker not found')
           index_path.write_text(index.replace(old_version, new_version), encoding='utf-8')
           PY
           grep -q 'isSimpleTelegramSso' _site/studyjob_telegram_runtime.js
-          grep -q 'studyjob_telegram_runtime.js?v=11.22.2' _site/telegram/index.html
+          grep -q 'studyjob_telegram_runtime.js?v=11.22.3' _site/telegram/index.html
           grep -q 'studyjob_first_launch.js?v=1' _site/telegram/index.html
 
       - name: Configure GitHub Pages
