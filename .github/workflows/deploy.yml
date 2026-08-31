@@ -92,46 +92,49 @@ jobs:
           runtime_path = Path('_site/studyjob_telegram_runtime.js')
           runtime = runtime_path.read_text(encoding='utf-8')
 
-          old = """      response = await fetch(url, {
-        method: 'POST',
-        cache: 'no-store',
-        headers: Object.assign({
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-          'apikey': PUBLISHABLE_KEY,
-        }, accessToken ? { 'Authorization': 'Bearer ' + accessToken } : {}),
-        body: JSON.stringify(body),
-      });"""
+          old = '\n'.join([
+              "      response = await fetch(url, {",
+              "        method: 'POST',",
+              "        cache: 'no-store',",
+              "        headers: Object.assign({",
+              "          'Content-Type': 'application/json',",
+              "          'Accept': 'application/json',",
+              "          'apikey': PUBLISHABLE_KEY,",
+              "        }, accessToken ? { 'Authorization': 'Bearer ' + accessToken } : {}),",
+              "        body: JSON.stringify(body),",
+              "      });",
+          ])
 
-          new = """      const isSimpleTelegramSso = url === SSO_ENDPOINT && !accessToken;
-      response = await fetch(url, {
-        method: 'POST',
-        cache: 'no-store',
-        headers: isSimpleTelegramSso
-          ? {
-              'Content-Type': 'text/plain;charset=UTF-8',
-              'Accept': 'application/json',
-            }
-          : Object.assign({
-              'Content-Type': 'application/json',
-              'Accept': 'application/json',
-              'apikey': PUBLISHABLE_KEY,
-            }, accessToken ? { 'Authorization': 'Bearer ' + accessToken } : {}),
-        body: JSON.stringify(body),
-      });"""
+          new = '\n'.join([
+              "      const isSimpleTelegramSso = url === SSO_ENDPOINT && !accessToken;",
+              "      response = await fetch(url, {",
+              "        method: 'POST',",
+              "        cache: 'no-store',",
+              "        headers: isSimpleTelegramSso",
+              "          ? {",
+              "              'Content-Type': 'text/plain;charset=UTF-8',",
+              "              'Accept': 'application/json',",
+              "            }",
+              "          : Object.assign({",
+              "              'Content-Type': 'application/json',",
+              "              'Accept': 'application/json',",
+              "              'apikey': PUBLISHABLE_KEY,",
+              "            }, accessToken ? { 'Authorization': 'Bearer ' + accessToken } : {}),",
+              "        body: JSON.stringify(body),",
+              "      });",
+          ])
 
           if old not in runtime:
               raise RuntimeError('Telegram runtime SSO fetch marker not found')
-          runtime = runtime.replace(old, new, 1)
-          runtime_path.write_text(runtime, encoding='utf-8')
+          runtime_path.write_text(runtime.replace(old, new, 1), encoding='utf-8')
 
           index_path = Path('_site/telegram/index.html')
           index = index_path.read_text(encoding='utf-8')
-          index = index.replace(
-              'studyjob_telegram_runtime.js?v=11.22.1',
-              'studyjob_telegram_runtime.js?v=11.22.2',
-          )
-          index_path.write_text(index, encoding='utf-8')
+          old_version = 'studyjob_telegram_runtime.js?v=11.22.1'
+          new_version = 'studyjob_telegram_runtime.js?v=11.22.2'
+          if old_version not in index and new_version not in index:
+              raise RuntimeError('Telegram runtime cache marker not found')
+          index_path.write_text(index.replace(old_version, new_version), encoding='utf-8')
           PY
           grep -q 'isSimpleTelegramSso' _site/studyjob_telegram_runtime.js
           grep -q 'studyjob_telegram_runtime.js?v=11.22.2' _site/telegram/index.html
