@@ -10,6 +10,54 @@
   <meta name="color-scheme" content="light dark">
   <link rel="icon" type="image/png" href="/favicon.png">
   <title>Study Job</title>
+  <script>
+    (function () {
+      var BUILD = 'studyjob-v42-94f9d928-cache-reset-20260902';
+      var KEY = 'studyjob_tg_cache_build';
+      var current = new URL(location.href);
+      var alreadyReset = current.searchParams.get('cache_reset') === BUILD;
+      try {
+        if (localStorage.getItem(KEY) === BUILD || alreadyReset) {
+          localStorage.setItem(KEY, BUILD);
+          return;
+        }
+      } catch (_) {
+        if (alreadyReset) return;
+      }
+
+      try { window.stop(); } catch (_) {}
+
+      Promise.resolve().then(function () {
+        var work = [];
+        try {
+          if ('serviceWorker' in navigator) {
+            work.push(
+              navigator.serviceWorker.getRegistrations().then(function (registrations) {
+                return Promise.all(registrations.map(function (registration) {
+                  return registration.unregister();
+                }));
+              })
+            );
+          }
+          if ('caches' in window) {
+            work.push(
+              caches.keys().then(function (names) {
+                return Promise.all(names.map(function (name) {
+                  return caches.delete(name);
+                }));
+              })
+            );
+          }
+        } catch (_) {}
+
+        return Promise.all(work).catch(function () {});
+      }).then(function () {
+        try { localStorage.setItem(KEY, BUILD); } catch (_) {}
+        current.searchParams.set('cache_reset', BUILD);
+        location.replace(current.pathname + '?' + current.searchParams.toString() + current.hash);
+      });
+    })();
+  </script>
   <script src="https://telegram.org/js/telegram-web-app.js?63"></script>
   <script>
     (function () {
