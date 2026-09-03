@@ -9,10 +9,12 @@
   <meta name="theme-color" content="#101216">
   <meta name="color-scheme" content="light dark">
   <link rel="icon" type="image/png" href="/favicon.png">
+  <link rel="manifest" href="/manifest.json">
   <title>Study Job</title>
+
   <script>
     (function () {
-      var BUILD = 'studyjob-v42-e5080d6e-cache-reset-20260902';
+      var BUILD = 'studyjob-auth-entry-v1';
       var KEY = 'studyjob_tg_cache_build';
       var current = new URL(location.href);
       var alreadyReset = current.searchParams.get('cache_reset') === BUILD;
@@ -49,7 +51,6 @@
             );
           }
         } catch (_) {}
-
         return Promise.all(work).catch(function () {});
       }).then(function () {
         try { localStorage.setItem(KEY, BUILD); } catch (_) {}
@@ -58,220 +59,86 @@
       });
     })();
   </script>
+
   <script src="https://telegram.org/js/telegram-web-app.js?63"></script>
-  <script>
-    (function () {
-      var SESSION_KEY = 'sb-ppciitxcvoettvpnierk-auth-token';
-      var SIGNED_OUT_KEY = 'studyjob_telegram_signed_out_user_v1';
+  <script src="/studyjob_telegram.js?v=auth-entry-v1" defer></script>
+  <script src="/studyjob_turnstile.js?v=web2_cache_reset_20260831" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js" defer></script>
+  <script src="/studyjob_ocr.js?v=picker8_warm1800_20260830" defer></script>
 
-      function telegramUserId() {
-        try {
-          var telegram = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
-          var user = telegram && telegram.initDataUnsafe ? telegram.initDataUnsafe.user : null;
-          var id = user ? Number(user.id) : 0;
-          return Number.isSafeInteger(id) && id > 0 ? String(id) : '';
-        } catch (_) {
-          return '';
-        }
-      }
-
-      function clearPersistedStudyJobSession() {
-        try {
-          var keys = [];
-          for (var i = 0; i < window.localStorage.length; i++) {
-            var key = String(window.localStorage.key(i) || '');
-            if (key === SESSION_KEY || key.endsWith('.' + SESSION_KEY)) keys.push(key);
-          }
-          keys.forEach(function (key) { window.localStorage.removeItem(key); });
-        } catch (_) {}
-      }
-
-      var userId = telegramUserId();
-      var signedOut = false;
-      try {
-        signedOut = Boolean(userId && window.localStorage.getItem(SIGNED_OUT_KEY) === userId);
-      } catch (_) {}
-
-      // Never trust a persisted Study Job browser session as proof of the
-      // current Telegram account. Every Mini App launch must go through the
-      // signed Telegram initData -> server SSO path.
-      clearPersistedStudyJobSession();
-
-      try {
-        var current = new URL(location.href);
-        if (!current.searchParams.get('retry')) current.searchParams.set('retry', 'account-verify');
-        if (signedOut) current.searchParams.set('existing', '1');
-        history.replaceState(null, '', current.pathname + '?' + current.searchParams.toString() + current.hash);
-      } catch (_) {}
-
-      window.__studyjobTelegramUserId = userId;
-      window.__studyjobTelegramSignedOut = signedOut;
-      window.__studyjobTelegramSignedOutKey = SIGNED_OUT_KEY;
-    })();
-  </script>
-  <script>
-    (function () {
-      var nativeFetch = window.fetch.bind(window);
-
-      function clearExplicitLogout() {
-        try {
-          var userId = String(window.__studyjobTelegramUserId || '');
-          var key = String(window.__studyjobTelegramSignedOutKey || '');
-          if (userId && key && window.localStorage.getItem(key) === userId) {
-            window.localStorage.removeItem(key);
-          }
-        } catch (_) {}
-        window.__studyjobTelegramSignedOut = false;
-      }
-
-      window.fetch = function (input, init) {
-        try {
-          var rawUrl = typeof input === 'string' ? input : String(input && input.url || '');
-          if (rawUrl.indexOf('/functions/v1/telegram-sso') !== -1) {
-            if (window.__studyjobTelegramSignedOut === true) {
-              return Promise.resolve(new Response(
-                JSON.stringify({ ok: true, linked: false }),
-                { status: 200, headers: { 'Content-Type': 'application/json; charset=utf-8' } }
-              ));
-            }
-            var next = Object.assign({}, init || {});
-            next.headers = {
-              'Accept': 'application/json',
-              'Content-Type': 'text/plain;charset=UTF-8'
-            };
-            return nativeFetch(input, next);
-          }
-
-          if (rawUrl.indexOf('/functions/v1/telegram-link') !== -1 &&
-              window.__studyjobTelegramSignedOut === true) {
-            return nativeFetch(input, init).then(function (response) {
-              if (response && response.ok) clearExplicitLogout();
-              return response;
-            });
-          }
-        } catch (_) {}
-        return nativeFetch(input, init);
-      };
-    })();
-  </script>
-  <script>
-    (function () {
-      var DEEP_LINK_KEY = 'studyjob_pending_deeplink_v1';
-
-      function hasSessionHash() {
-        try {
-          var p = new URLSearchParams(String(location.hash || '').replace(/^#/, ''));
-          return Boolean(p.get('access_token') && p.get('refresh_token'));
-        } catch (_) {
-          return false;
-        }
-      }
-
-      function cleanDeepLink(search) {
-        try {
-          var source = search instanceof URLSearchParams ? search : new URLSearchParams(search || '');
-          var target = String(source.get('sj_target') || '').trim().toLowerCase();
-          var id = String(source.get('sj_id') || '').trim();
-          if (!target) return '';
-
-          var allowed = {
-            home: true,
-            notifications: true,
-            task: true,
-            task_chat: true,
-            task_rating: true,
-            service: true,
-            service_order: true,
-            service_order_chat: true,
-            service_order_rating: true,
-            schedule: true,
-            student_verification: true,
-            admin_student_verification: true,
-            creation_restriction: true
-          };
-          if (!allowed[target]) return '';
-
-          var needsId = target === 'task' || target === 'task_chat' || target === 'task_rating' ||
-            target === 'service' || target === 'service_order' ||
-            target === 'service_order_chat' || target === 'service_order_rating';
-          if (needsId && !/^\d+$/.test(id)) return '';
-
-          var result = new URLSearchParams();
-          result.set('sj_target', target);
-          if (needsId) result.set('sj_id', id);
-          return result.toString();
-        } catch (_) {
-          return '';
-        }
-      }
-
-      function saveDeepLinkFromUrl() {
-        var route = cleanDeepLink(location.search);
-        if (!route) return;
-        try { sessionStorage.setItem(DEEP_LINK_KEY, route); } catch (_) {}
-      }
-
-      function pendingDeepLink() {
-        var current = cleanDeepLink(location.search);
-        if (current) return current;
-        try { return cleanDeepLink(sessionStorage.getItem(DEEP_LINK_KEY) || ''); } catch (_) { return ''; }
-      }
-
-      function appendDeepLink(url) {
-        var route = pendingDeepLink();
-        if (!route) return url;
-        var params = new URLSearchParams(route);
-        var target = params.get('sj_target');
-        var id = params.get('sj_id');
-        if (target) url.searchParams.set('sj_target', target);
-        if (id) url.searchParams.set('sj_id', id);
-        return url;
-      }
-
-      function handSessionToFlutter() {
-        if (!hasSessionHash()) return;
-        var url = new URL('/', location.origin);
-        url.searchParams.set('tg_auth', '1');
-        appendDeepLink(url);
-        try { sessionStorage.removeItem(DEEP_LINK_KEY); } catch (_) {}
-        location.replace(url.pathname + '?' + url.searchParams.toString() + location.hash);
-      }
-
-      saveDeepLinkFromUrl();
-      window.addEventListener('hashchange', handSessionToFlutter);
-      handSessionToFlutter();
-
-      window.addEventListener('DOMContentLoaded', function () {
-        setTimeout(function () {
-          var gate = document.getElementById('sj-tg-gate');
-          var card = document.getElementById('sj-tg-card');
-          if (!gate || !card || !card.querySelector('.sj-tg-progress')) return;
-          card.innerHTML =
-            '<span class="sj-tg-kicker">Telegram Mini App</span>' +
-            '<h1 class="sj-tg-title">Вход не завершился</h1>' +
-            '<p class="sj-tg-subtitle">Повтори вход через Telegram. Обычный вход внутри Mini App отключён.</p>' +
-            '<button class="sj-tg-btn sj-tg-btn-primary" id="sj-tg-watchdog-retry" type="button">Повторить через Telegram</button>';
-          var retry = document.getElementById('sj-tg-watchdog-retry');
-          if (retry) retry.onclick = function () {
-            var url = new URL('/telegram/', location.origin);
-            appendDeepLink(url);
-            url.searchParams.set('retry', String(Date.now()));
-            location.replace(url.pathname + '?' + url.searchParams.toString());
-          };
-        }, 12000);
-      });
-    })();
-  </script>
   <style>
-    html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#101216;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
-    #studyjob-web-loader{position:fixed;inset:0;z-index:9999;display:grid;place-items:center;background:radial-gradient(circle at 50% 35%,rgba(83,106,255,.12),transparent 30%),#101216;color:#f8f9ff;transition:opacity .28s ease,visibility .28s ease}
-    #studyjob-web-loader.done{opacity:0;visibility:hidden;pointer-events:none}
-    .studyjob-loader-card{display:flex;flex-direction:column;align-items:center;gap:14px;transform:translateY(-2vh)}
-    .studyjob-loader-logo{width:104px;height:104px;object-fit:contain;filter:drop-shadow(0 18px 32px rgba(0,91,255,.18))}
-    .studyjob-loader-title{margin:0;font-size:23px;font-weight:800;letter-spacing:-.02em}
-    .studyjob-loader-line{width:92px;height:4px;border-radius:99px;overflow:hidden;background:rgba(100,110,140,.15)}
-    .studyjob-loader-line::after{content:"";display:block;width:45%;height:100%;border-radius:inherit;background:linear-gradient(90deg,#6377ff,#31a8ff);animation:studyjob-loading 1s ease-in-out infinite alternate}
-    @keyframes studyjob-loading{from{transform:translateX(-10%)}to{transform:translateX(130%)}}
+    html, body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #101216;
+      color: #f8f9ff;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    #studyjob-web-loader {
+      position: fixed;
+      inset: 0;
+      z-index: 9999;
+      display: grid;
+      place-items: center;
+      background:
+        radial-gradient(circle at 50% 35%, rgba(83, 106, 255, .12), transparent 30%),
+        #101216;
+      transition: opacity .28s ease, visibility .28s ease;
+    }
+
+    #studyjob-web-loader.done {
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+    }
+
+    .studyjob-loader-card {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 14px;
+      transform: translateY(-2vh);
+    }
+
+    .studyjob-loader-logo {
+      width: 104px;
+      height: 104px;
+      object-fit: contain;
+      filter: drop-shadow(0 18px 32px rgba(0, 91, 255, .18));
+    }
+
+    .studyjob-loader-title {
+      margin: 0;
+      font-size: 23px;
+      font-weight: 800;
+      letter-spacing: -.02em;
+    }
+
+    .studyjob-loader-line {
+      width: 92px;
+      height: 4px;
+      border-radius: 99px;
+      overflow: hidden;
+      background: rgba(100, 110, 140, .15);
+    }
+
+    .studyjob-loader-line::after {
+      content: "";
+      display: block;
+      width: 45%;
+      height: 100%;
+      border-radius: inherit;
+      background: linear-gradient(90deg, #6377ff, #31a8ff);
+      animation: studyjob-loading 1s ease-in-out infinite alternate;
+    }
+
+    @keyframes studyjob-loading {
+      from { transform: translateX(-10%); }
+      to { transform: translateX(130%); }
+    }
   </style>
 </head>
 <body>
@@ -282,8 +149,7 @@
       <div class="studyjob-loader-line" aria-hidden="true"></div>
     </div>
   </div>
-  <script src="/studyjob_telegram_runtime.js?v=11.22.3" defer></script>
-  <script src="/studyjob_first_launch.js?v=1" defer></script>
-  <script src="/studyjob_bootstrap.js?v=e5080d6e" defer></script>
+
+  <script src="/studyjob_bootstrap.js?v=auth-entry-v1" defer></script>
 </body>
 </html>
