@@ -4,6 +4,8 @@
 (function () {
   'use strict';
 
+  const SIGNED_OUT_KEY = 'studyjob_telegram_signed_out_user_v1';
+
   function currentTelegram() {
     try {
       return window.Telegram && window.Telegram.WebApp
@@ -16,6 +18,43 @@
 
   function safeString(value) {
     return typeof value === 'string' ? value : '';
+  }
+
+  function currentTelegramUserId() {
+    const telegram = currentTelegram();
+    try {
+      const user = telegram && telegram.initDataUnsafe
+        ? telegram.initDataUnsafe.user
+        : null;
+      const id = user ? Number(user.id) : 0;
+      return Number.isSafeInteger(id) && id > 0 ? String(id) : '';
+    } catch (_) {
+      return '';
+    }
+  }
+
+  function markSignedOut() {
+    const id = currentTelegramUserId();
+    if (!id) return false;
+    try {
+      window.localStorage.setItem(SIGNED_OUT_KEY, id);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function clearSignedOut() {
+    const id = currentTelegramUserId();
+    if (!id) return false;
+    try {
+      if (window.localStorage.getItem(SIGNED_OUT_KEY) === id) {
+        window.localStorage.removeItem(SIGNED_OUT_KEY);
+      }
+      return true;
+    } catch (_) {
+      return false;
+    }
   }
 
   function prepareTelegram() {
@@ -98,6 +137,8 @@
       if (!telegram || !telegram.initDataUnsafe) return '';
       return safeString(telegram.initDataUnsafe.start_param);
     },
+    markSignedOut: markSignedOut,
+    clearSignedOut: clearSignedOut,
     requestWriteAccess: requestWriteAccess,
     openTelegramLink: openTelegramLink,
   });
