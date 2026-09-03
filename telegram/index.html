@@ -104,25 +104,26 @@
         history.replaceState(null, '', current.pathname + '?' + current.searchParams.toString() + current.hash);
       } catch (_) {}
 
+      window.__studyjobTelegramUserId = userId;
       window.__studyjobTelegramSignedOut = signedOut;
-
-      // Clicking the explicit login/connect button is the user's opt-in to
-      // resume Telegram SSO after they previously logged out.
-      document.addEventListener('click', function (event) {
-        var target = event && event.target;
-        if (!target || target.id !== 'sj-tg-connect') return;
-        try {
-          if (userId && window.localStorage.getItem(SIGNED_OUT_KEY) === userId) {
-            window.localStorage.removeItem(SIGNED_OUT_KEY);
-          }
-        } catch (_) {}
-        window.__studyjobTelegramSignedOut = false;
-      }, true);
+      window.__studyjobTelegramSignedOutKey = SIGNED_OUT_KEY;
     })();
   </script>
   <script>
     (function () {
       var nativeFetch = window.fetch.bind(window);
+
+      function clearExplicitLogout() {
+        try {
+          var userId = String(window.__studyjobTelegramUserId || '');
+          var key = String(window.__studyjobTelegramSignedOutKey || '');
+          if (userId && key && window.localStorage.getItem(key) === userId) {
+            window.localStorage.removeItem(key);
+          }
+        } catch (_) {}
+        window.__studyjobTelegramSignedOut = false;
+      }
+
       window.fetch = function (input, init) {
         try {
           var rawUrl = typeof input === 'string' ? input : String(input && input.url || '');
@@ -139,6 +140,14 @@
               'Content-Type': 'text/plain;charset=UTF-8'
             };
             return nativeFetch(input, next);
+          }
+
+          if (rawUrl.indexOf('/functions/v1/telegram-link') !== -1 &&
+              window.__studyjobTelegramSignedOut === true) {
+            return nativeFetch(input, init).then(function (response) {
+              if (response && response.ok) clearExplicitLogout();
+              return response;
+            });
           }
         } catch (_) {}
         return nativeFetch(input, init);
