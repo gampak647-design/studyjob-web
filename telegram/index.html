@@ -61,11 +61,78 @@
   <script src="https://telegram.org/js/telegram-web-app.js?63"></script>
   <script>
     (function () {
+      var SESSION_KEY = 'sb-ppciitxcvoettvpnierk-auth-token';
+      var SIGNED_OUT_KEY = 'studyjob_telegram_signed_out_user_v1';
+
+      function telegramUserId() {
+        try {
+          var telegram = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
+          var user = telegram && telegram.initDataUnsafe ? telegram.initDataUnsafe.user : null;
+          var id = user ? Number(user.id) : 0;
+          return Number.isSafeInteger(id) && id > 0 ? String(id) : '';
+        } catch (_) {
+          return '';
+        }
+      }
+
+      function clearPersistedStudyJobSession() {
+        try {
+          var keys = [];
+          for (var i = 0; i < window.localStorage.length; i++) {
+            var key = String(window.localStorage.key(i) || '');
+            if (key === SESSION_KEY || key.endsWith('.' + SESSION_KEY)) keys.push(key);
+          }
+          keys.forEach(function (key) { window.localStorage.removeItem(key); });
+        } catch (_) {}
+      }
+
+      var userId = telegramUserId();
+      var signedOut = false;
+      try {
+        signedOut = Boolean(userId && window.localStorage.getItem(SIGNED_OUT_KEY) === userId);
+      } catch (_) {}
+
+      // Never trust a persisted Study Job browser session as proof of the
+      // current Telegram account. Every Mini App launch must go through the
+      // signed Telegram initData -> server SSO path.
+      clearPersistedStudyJobSession();
+
+      try {
+        var current = new URL(location.href);
+        if (!current.searchParams.get('retry')) current.searchParams.set('retry', 'account-verify');
+        if (signedOut) current.searchParams.set('existing', '1');
+        history.replaceState(null, '', current.pathname + '?' + current.searchParams.toString() + current.hash);
+      } catch (_) {}
+
+      window.__studyjobTelegramSignedOut = signedOut;
+
+      // Clicking the explicit login/connect button is the user's opt-in to
+      // resume Telegram SSO after they previously logged out.
+      document.addEventListener('click', function (event) {
+        var target = event && event.target;
+        if (!target || target.id !== 'sj-tg-connect') return;
+        try {
+          if (userId && window.localStorage.getItem(SIGNED_OUT_KEY) === userId) {
+            window.localStorage.removeItem(SIGNED_OUT_KEY);
+          }
+        } catch (_) {}
+        window.__studyjobTelegramSignedOut = false;
+      }, true);
+    })();
+  </script>
+  <script>
+    (function () {
       var nativeFetch = window.fetch.bind(window);
       window.fetch = function (input, init) {
         try {
           var rawUrl = typeof input === 'string' ? input : String(input && input.url || '');
           if (rawUrl.indexOf('/functions/v1/telegram-sso') !== -1) {
+            if (window.__studyjobTelegramSignedOut === true) {
+              return Promise.resolve(new Response(
+                JSON.stringify({ ok: true, linked: false }),
+                { status: 200, headers: { 'Content-Type': 'application/json; charset=utf-8' } }
+              ));
+            }
             var next = Object.assign({}, init || {});
             next.headers = {
               'Accept': 'application/json',
