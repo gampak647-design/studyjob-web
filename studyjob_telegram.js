@@ -1,6 +1,6 @@
 // Study Job Telegram Mini App bridge.
-// This file deliberately exposes only the raw Telegram initData string to Dart.
-// Authorization decisions must be made server-side after validating initData.
+// This file exposes Telegram launch context to Dart. Authorization decisions
+// must still be made server-side after validating initData.
 (function () {
   'use strict';
 
@@ -57,20 +57,26 @@
     }
   }
 
+  function isSignedOut() {
+    const id = currentTelegramUserId();
+    if (!id) return false;
+    try {
+      return window.localStorage.getItem(SIGNED_OUT_KEY) === id;
+    } catch (_) {
+      return false;
+    }
+  }
+
   function prepareTelegram() {
     const telegram = currentTelegram();
     if (!telegram) return false;
     try {
       if (typeof telegram.ready === 'function') telegram.ready();
       if (typeof telegram.expand === 'function') telegram.expand();
-      // Bot API 7.7+: Study Job owns vertical scrolling, so do not let the
-      // same downward gesture minimize the Mini App while browsing a list.
       if (typeof telegram.disableVerticalSwipes === 'function') {
         telegram.disableVerticalSwipes();
       }
-    } catch (_) {
-      // Older Telegram clients must remain usable even without newer methods.
-    }
+    } catch (_) {}
     return true;
   }
 
@@ -124,6 +130,10 @@
       const telegram = currentTelegram();
       return telegram ? safeString(telegram.initData) : '';
     },
+    getUserId: function () {
+      prepareTelegram();
+      return currentTelegramUserId();
+    },
     getPlatform: function () {
       const telegram = currentTelegram();
       return telegram ? safeString(telegram.platform) : '';
@@ -139,13 +149,11 @@
     },
     markSignedOut: markSignedOut,
     clearSignedOut: clearSignedOut,
+    isSignedOut: isSignedOut,
     requestWriteAccess: requestWriteAccess,
     openTelegramLink: openTelegramLink,
   });
 
-  // Telegram's script and initData can become observable a little after our
-  // bridge executes inside some WebViews. Re-resolve WebApp instead of keeping
-  // a stale null reference captured at page load.
   [0, 50, 150, 300, 600, 1000, 1600].forEach(function (delay) {
     window.setTimeout(function () {
       const available = prepareTelegram() && isMiniApp();
