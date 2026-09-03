@@ -71,77 +71,23 @@ jobs:
           test -f _site/main.dart.js
           test -f _site/studyjob_telegram.js
 
-      - name: Overlay Telegram Mini App files
+      - name: Overlay Telegram Mini App entry
+        shell: bash
         run: |
           mkdir -p _site/telegram
           cp telegram/index.html _site/telegram/index.html
-          cp studyjob_telegram_runtime.js _site/studyjob_telegram_runtime.js
-          cp studyjob_first_launch.js _site/studyjob_first_launch.js
           cp studyjob_telegram.js _site/studyjob_telegram.js
           test -f _site/telegram/index.html
-          test -f _site/studyjob_telegram_runtime.js
-          test -f _site/studyjob_first_launch.js
           test -f _site/studyjob_telegram.js
+          grep -q 'telegram-web-app.js' _site/telegram/index.html
+          grep -q 'studyjob_telegram.js' _site/telegram/index.html
+          grep -q 'studyjob_bootstrap.js' _site/telegram/index.html
+          grep -q 'getUserId' _site/studyjob_telegram.js
           grep -q 'disableVerticalSwipes' _site/studyjob_telegram.js
-          grep -q 'currentTelegram' _site/studyjob_telegram.js
-          grep -q 'Создать аккаунт Study Job' _site/studyjob_first_launch.js
-
-      - name: Apply Telegram SSO no-preflight hotfix
-        shell: bash
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-
-          runtime_path = Path('_site/studyjob_telegram_runtime.js')
-          runtime = runtime_path.read_text(encoding='utf-8')
-
-          old = '\n'.join([
-              "      response = await fetch(url, {",
-              "        method: 'POST',",
-              "        cache: 'no-store',",
-              "        headers: Object.assign({",
-              "          'Content-Type': 'application/json',",
-              "          'Accept': 'application/json',",
-              "          'apikey': PUBLISHABLE_KEY,",
-              "        }, accessToken ? { 'Authorization': 'Bearer ' + accessToken } : {}),",
-              "        body: JSON.stringify(body),",
-              "      });",
-          ])
-
-          new = '\n'.join([
-              "      const isSimpleTelegramSso = url === SSO_ENDPOINT && !accessToken;",
-              "      response = await fetch(url, {",
-              "        method: 'POST',",
-              "        cache: 'no-store',",
-              "        headers: isSimpleTelegramSso",
-              "          ? {",
-              "              'Content-Type': 'text/plain;charset=UTF-8',",
-              "              'Accept': 'application/json',",
-              "            }",
-              "          : Object.assign({",
-              "              'Content-Type': 'application/json',",
-              "              'Accept': 'application/json',",
-              "              'apikey': PUBLISHABLE_KEY,",
-              "            }, accessToken ? { 'Authorization': 'Bearer ' + accessToken } : {}),",
-              "        body: JSON.stringify(body),",
-              "      });",
-          ])
-
-          if old not in runtime:
-              raise RuntimeError('Telegram runtime SSO fetch marker not found')
-          runtime_path.write_text(runtime.replace(old, new, 1), encoding='utf-8')
-
-          index_path = Path('_site/telegram/index.html')
-          index = index_path.read_text(encoding='utf-8')
-          old_version = 'studyjob_telegram_runtime.js?v=11.22.1'
-          new_version = 'studyjob_telegram_runtime.js?v=11.22.3'
-          if old_version not in index and new_version not in index:
-              raise RuntimeError('Telegram runtime cache marker not found')
-          index_path.write_text(index.replace(old_version, new_version), encoding='utf-8')
-          PY
-          grep -q 'isSimpleTelegramSso' _site/studyjob_telegram_runtime.js
-          grep -q 'studyjob_telegram_runtime.js?v=11.22.3' _site/telegram/index.html
-          grep -q 'studyjob_first_launch.js?v=1' _site/telegram/index.html
+          if grep -q 'studyjob_telegram_runtime.js' _site/telegram/index.html; then
+            echo 'Legacy Telegram SSO runtime must not run before Flutter auth.' >&2
+            exit 1
+          fi
 
       - name: Version Flutter web cache per deployment
         shell: bash
@@ -172,19 +118,21 @@ jobs:
               raise RuntimeError('Flutter bootstrap cache markers not found')
           bootstrap_path.write_text(bootstrap, encoding='utf-8')
 
-          def version_bootstrap_reference(path: Path) -> None:
+          def version_reference(path: Path, asset: str) -> None:
               text = path.read_text(encoding='utf-8')
               text, count = re.subn(
-                  r"(studyjob_bootstrap\.js\?v=)[^\"'<>]+",
+                  rf"({re.escape(asset)}\?v=)[^\"'<>]+",
                   lambda match: match.group(1) + version,
                   text,
                   count=1,
               )
               if count != 1:
-                  raise RuntimeError(f'Bootstrap reference not found in {path}')
+                  raise RuntimeError(f'{asset} reference not found in {path}')
               path.write_text(text, encoding='utf-8')
 
-          version_bootstrap_reference(Path('_site/index.html'))
+          root_index = Path('_site/index.html')
+          version_reference(root_index, 'studyjob_bootstrap.js')
+          version_reference(root_index, 'studyjob_telegram.js')
 
           telegram_path = Path('_site/telegram/index.html')
           telegram = telegram_path.read_text(encoding='utf-8')
@@ -194,22 +142,20 @@ jobs:
               telegram,
               count=1,
           )
-          telegram, tg_bootstrap_count = re.subn(
-              r"(studyjob_bootstrap\.js\?v=)[^\"'<>]+",
-              lambda match: match.group(1) + version,
-              telegram,
-              count=1,
-          )
-          if tg_build_count != 1 or tg_bootstrap_count != 1:
-              raise RuntimeError('Telegram cache markers not found')
+          if tg_build_count != 1:
+              raise RuntimeError('Telegram cache build marker not found')
           telegram_path.write_text(telegram, encoding='utf-8')
+          version_reference(telegram_path, 'studyjob_bootstrap.js')
+          version_reference(telegram_path, 'studyjob_telegram.js')
 
           print(f'Flutter web cache version: {build}')
           PY
           grep -q "studyjob-deploy-${GITHUB_SHA:0:12}" _site/studyjob_bootstrap.js
           grep -q "studyjob_bootstrap.js?v=${GITHUB_SHA:0:12}" _site/index.html
+          grep -q "studyjob_telegram.js?v=${GITHUB_SHA:0:12}" _site/index.html
           grep -q "studyjob-deploy-${GITHUB_SHA:0:12}" _site/telegram/index.html
           grep -q "studyjob_bootstrap.js?v=${GITHUB_SHA:0:12}" _site/telegram/index.html
+          grep -q "studyjob_telegram.js?v=${GITHUB_SHA:0:12}" _site/telegram/index.html
 
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
