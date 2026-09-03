@@ -143,6 +143,74 @@ jobs:
           grep -q 'studyjob_telegram_runtime.js?v=11.22.3' _site/telegram/index.html
           grep -q 'studyjob_first_launch.js?v=1' _site/telegram/index.html
 
+      - name: Version Flutter web cache per deployment
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import os
+          import re
+          from pathlib import Path
+
+          version = os.environ.get('GITHUB_SHA', 'dev')[:12]
+          build = f'studyjob-deploy-{version}'
+
+          bootstrap_path = Path('_site/studyjob_bootstrap.js')
+          bootstrap = bootstrap_path.read_text(encoding='utf-8')
+          bootstrap, build_count = re.subn(
+              r"const build = '[^']+';",
+              f"const build = '{build}';",
+              bootstrap,
+              count=1,
+          )
+          bootstrap, flutter_count = re.subn(
+              r"script\.src = 'flutter_bootstrap\.js\?v=[^']+';",
+              f"script.src = 'flutter_bootstrap.js?v={version}';",
+              bootstrap,
+              count=1,
+          )
+          if build_count != 1 or flutter_count != 1:
+              raise RuntimeError('Flutter bootstrap cache markers not found')
+          bootstrap_path.write_text(bootstrap, encoding='utf-8')
+
+          def version_bootstrap_reference(path: Path) -> None:
+              text = path.read_text(encoding='utf-8')
+              text, count = re.subn(
+                  r"(studyjob_bootstrap\.js\?v=)[^\"'<>]+",
+                  lambda match: match.group(1) + version,
+                  text,
+                  count=1,
+              )
+              if count != 1:
+                  raise RuntimeError(f'Bootstrap reference not found in {path}')
+              path.write_text(text, encoding='utf-8')
+
+          version_bootstrap_reference(Path('_site/index.html'))
+
+          telegram_path = Path('_site/telegram/index.html')
+          telegram = telegram_path.read_text(encoding='utf-8')
+          telegram, tg_build_count = re.subn(
+              r"var BUILD = '[^']+';",
+              f"var BUILD = '{build}';",
+              telegram,
+              count=1,
+          )
+          telegram, tg_bootstrap_count = re.subn(
+              r"(studyjob_bootstrap\.js\?v=)[^\"'<>]+",
+              lambda match: match.group(1) + version,
+              telegram,
+              count=1,
+          )
+          if tg_build_count != 1 or tg_bootstrap_count != 1:
+              raise RuntimeError('Telegram cache markers not found')
+          telegram_path.write_text(telegram, encoding='utf-8')
+
+          print(f'Flutter web cache version: {build}')
+          PY
+          grep -q "studyjob-deploy-${GITHUB_SHA:0:12}" _site/studyjob_bootstrap.js
+          grep -q "studyjob_bootstrap.js?v=${GITHUB_SHA:0:12}" _site/index.html
+          grep -q "studyjob-deploy-${GITHUB_SHA:0:12}" _site/telegram/index.html
+          grep -q "studyjob_bootstrap.js?v=${GITHUB_SHA:0:12}" _site/telegram/index.html
+
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
 
