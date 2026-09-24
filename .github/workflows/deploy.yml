@@ -32,21 +32,7 @@ jobs:
             echo 'Portable Study Job archive detected; reconstructing ZIP.'
             cat .deploy-chunks/part-*.b64 | base64 --decode > StudyJob_WEB_READY.zip.next
 
-            python3 - <<'PY'
-            from pathlib import Path
-            from zipfile import ZipFile
-
-            archive = Path('StudyJob_WEB_READY.zip.next')
-            with ZipFile(archive) as zip_file:
-                names = set(zip_file.namelist())
-                required = {'index.html', 'main.dart.js', 'studyjob_telegram.js'}
-                missing = sorted(required - names)
-                if missing:
-                    raise RuntimeError(f'Missing critical files in transported archive: {missing}')
-                bad = zip_file.testzip()
-                if bad is not None:
-                    raise RuntimeError(f'Corrupt ZIP member: {bad}')
-            PY
+            python3 -c "from zipfile import ZipFile; z=ZipFile('StudyJob_WEB_READY.zip.next'); names=set(z.namelist()); required={'index.html','main.dart.js','studyjob_telegram.js'}; missing=sorted(required-names); (_ for _ in ()).throw(RuntimeError(f'Missing critical files in transported archive: {missing}')) if missing else None; bad=z.testzip(); (_ for _ in ()).throw(RuntimeError(f'Corrupt ZIP member: {bad}')) if bad is not None else None; z.close()"
 
             mv StudyJob_WEB_READY.zip.next StudyJob_WEB_READY.zip
             rm -rf .deploy-chunks
