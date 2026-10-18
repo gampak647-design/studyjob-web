@@ -1,0 +1,192 @@
+name: Deploy Study Job Web
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout deploy repository
+        uses: actions/checkout@v4
+
+      - name: Materialize transported web archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          if compgen -G '.deploy-chunks/part-*.b64' > /dev/null; then
+            echo 'Portable Study Job archive detected; reconstructing ZIP.'
+            cat .deploy-chunks/part-*.b64 | base64 --decode > StudyJob_WEB_READY.zip.next
+
+            python3 -c "from zipfile import ZipFile; z=ZipFile('StudyJob_WEB_READY.zip.next'); names=set(z.namelist()); required={'index.html','main.dart.js','studyjob_telegram.js'}; missing=sorted(required-names); (_ for _ in ()).throw(RuntimeError(f'Missing critical files in transported archive: {missing}')) if missing else None; bad=z.testzip(); (_ for _ in ()).throw(RuntimeError(f'Corrupt ZIP member: {bad}')) if bad is not None else None; z.close()"
+
+            mv StudyJob_WEB_READY.zip.next StudyJob_WEB_READY.zip
+            rm -rf .deploy-chunks
+
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add -A
+            if ! git diff --cached --quiet; then
+              git commit -m "Materialize transported Study Job web archive"
+              git push origin HEAD:main || echo 'Archive persisted only for this deploy; production deploy continues.'
+            fi
+          fi
+
+      - name: Unpack ready Study Job web build
+        shell: bash
+        run: |
+          rm -rf _site
+          mkdir -p _site
+          python3 - <<'PY'
+          import shutil
+          import stat
+          from pathlib import Path
+          from zipfile import ZipFile
+
+          archive = Path('StudyJob_WEB_READY.zip')
+          root = Path('_site').resolve()
+
+          with ZipFile(archive) as zip_file:
+              for info in zip_file.infolist():
+                  raw_name = info.filename
+                  name = raw_name.replace('\\', '/')
+                  parts = [part for part in name.split('/') if part not in ('', '.')]
+
+                  if not parts:
+                      continue
+                  if name.startswith('/') or any(part == '..' for part in parts):
+                      raise RuntimeError(f'Unsafe ZIP entry: {raw_name!r}')
+
+                  mode = (info.external_attr >> 16) & 0xFFFF
+                  if mode and stat.S_ISLNK(mode):
+                      raise RuntimeError(f'Symlink ZIP entry is not allowed: {raw_name!r}')
+
+                  target = root.joinpath(*parts)
+                  resolved = target.resolve()
+                  if resolved != root and root not in resolved.parents:
+                      raise RuntimeError(f'ZIP entry escapes destination: {raw_name!r}')
+
+                  if info.is_dir() or name.endswith('/') or name.endswith('\\'):
+                      target.mkdir(parents=True, exist_ok=True)
+                      continue
+
+                  target.parent.mkdir(parents=True, exist_ok=True)
+                  with zip_file.open(info) as source, target.open('wb') as destination:
+                      shutil.copyfileobj(source, destination)
+          PY
+          touch _site/.nojekyll
+          test -f _site/index.html
+          test -f _site/main.dart.js
+          test -f _site/studyjob_telegram.js
+
+      - name: Overlay Telegram Mini App entry
+        shell: bash
+        run: |
+          mkdir -p _site/telegram
+          cp telegram/index.html _site/telegram/index.html
+          cp studyjob_telegram.js _site/studyjob_telegram.js
+          test -f _site/telegram/index.html
+          test -f _site/studyjob_telegram.js
+          grep -q 'telegram-web-app.js' _site/telegram/index.html
+          grep -q 'studyjob_telegram.js' _site/telegram/index.html
+          grep -q 'studyjob_bootstrap.js' _site/telegram/index.html
+          grep -q 'getUserId' _site/studyjob_telegram.js
+          grep -q 'disableVerticalSwipes' _site/studyjob_telegram.js
+          if grep -q 'studyjob_telegram_runtime.js' _site/telegram/index.html; then
+            echo 'Legacy Telegram SSO runtime must not run before Flutter auth.' >&2
+            exit 1
+          fi
+
+      - name: Version Flutter web cache per deployment
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import os
+          import re
+          from pathlib import Path
+
+          version = os.environ.get('GITHUB_SHA', 'dev')[:12]
+          build = f'studyjob-deploy-{version}'
+
+          bootstrap_path = Path('_site/studyjob_bootstrap.js')
+          bootstrap = bootstrap_path.read_text(encoding='utf-8')
+          bootstrap, build_count = re.subn(
+              r"const build = '[^']+';",
+              f"const build = '{build}';",
+              bootstrap,
+              count=1,
+          )
+          bootstrap, flutter_count = re.subn(
+              r"script\.src = 'flutter_bootstrap\.js\?v=[^']+';",
+              f"script.src = 'flutter_bootstrap.js?v={version}';",
+              bootstrap,
+              count=1,
+          )
+          if build_count != 1 or flutter_count != 1:
+              raise RuntimeError('Flutter bootstrap cache markers not found')
+          bootstrap_path.write_text(bootstrap, encoding='utf-8')
+
+          def version_reference(path: Path, asset: str) -> None:
+              text = path.read_text(encoding='utf-8')
+              text, count = re.subn(
+                  rf"({re.escape(asset)}\?v=)[^\"'<>]+",
+                  lambda match: match.group(1) + version,
+                  text,
+                  count=1,
+              )
+              if count != 1:
+                  raise RuntimeError(f'{asset} reference not found in {path}')
+              path.write_text(text, encoding='utf-8')
+
+          root_index = Path('_site/index.html')
+          version_reference(root_index, 'studyjob_bootstrap.js')
+          version_reference(root_index, 'studyjob_telegram.js')
+
+          telegram_path = Path('_site/telegram/index.html')
+          telegram = telegram_path.read_text(encoding='utf-8')
+          telegram, tg_build_count = re.subn(
+              r"var BUILD = '[^']+';",
+              f"var BUILD = '{build}';",
+              telegram,
+              count=1,
+          )
+          if tg_build_count != 1:
+              raise RuntimeError('Telegram cache build marker not found')
+          telegram_path.write_text(telegram, encoding='utf-8')
+          version_reference(telegram_path, 'studyjob_bootstrap.js')
+          version_reference(telegram_path, 'studyjob_telegram.js')
+
+          print(f'Flutter web cache version: {build}')
+          PY
+          grep -q "studyjob-deploy-${GITHUB_SHA:0:12}" _site/studyjob_bootstrap.js
+          grep -q "studyjob_bootstrap.js?v=${GITHUB_SHA:0:12}" _site/index.html
+          grep -q "studyjob_telegram.js?v=${GITHUB_SHA:0:12}" _site/index.html
+          grep -q "studyjob-deploy-${GITHUB_SHA:0:12}" _site/telegram/index.html
+          grep -q "studyjob_bootstrap.js?v=${GITHUB_SHA:0:12}" _site/telegram/index.html
+          grep -q "studyjob_telegram.js?v=${GITHUB_SHA:0:12}" _site/telegram/index.html
+
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload website only
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+      - name: Deploy website
+        id: deployment
+        uses: actions/deploy-pages@v4
